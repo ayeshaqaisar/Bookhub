@@ -12,6 +12,7 @@ export async function registerUser({ email, password, data }: RegisterArgs) {
     email,
     password,
     options: { data },
+    emailRedirectTo: `${window.location.origin}/auth/callback`,
   });
   if (error) throw error;
   return signUpData;
