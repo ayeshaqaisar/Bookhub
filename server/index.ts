@@ -5,7 +5,7 @@ import { getConfig } from "./lib/config";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./lib/auth-middleware";
 import { registerAllRoutes } from "./routes";
-
+import multer from "multer";
 /**
  * Create Express application with middleware and route handlers
  * Configuration is validated early to fail fast in production
@@ -31,6 +31,20 @@ export function createServer() {
   allowedHeaders: ['Content-Type', 'Authorization', 'x-supabase-api-version'],
   credentials: true,
   };
+
+   // Multipart file upload middleware - stores files in memory with size limit
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 50 * 1024 * 1024, // 50 MB max file size
+    },
+  });
+  
+  app.use(upload.fields([
+    { name: 'pdf', maxCount: 1 },
+    { name: 'cover', maxCount: 1 },
+  ]));
+
 
   app.use(cors(corsOptions));
   app.use(express.json({ limit: "100mb" }));

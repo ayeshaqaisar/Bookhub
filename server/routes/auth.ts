@@ -6,10 +6,11 @@ import type { Request, Response } from 'express';
 import { getSupabaseAdmin } from '../supabase';
 import { logger } from '../lib/logger';
 import { createUserProfile } from '../lib/db';
-
 import { createClient } from '@supabase/supabase-js';
-import { getConfig } from '../lib/config'; // Your env vars
+import { getConfig } from '../lib/config';
+import  { fetchUserProfile } from'../lib/db';
 
+const config = getConfig();
 
 interface AuthResponse {
   success: boolean;
@@ -177,8 +178,7 @@ export async function handleLogin(req: Request, res: Response): Promise<void> {
 
     // Use the anon key client for user sign-in to get proper session data
     // We need to create a client with anon key for this operation
-    const config = getConfig();
-
+    
 
     const anonClient = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
       auth: { persistSession: false },
@@ -374,6 +374,71 @@ export async function handleGetSession(req: Request, res: Response): Promise<voi
 }
 
 /**
+ * GET /api/v1/auth/admin-status
+ * Check if current user is an admin
+ * Protected endpoint - requires authentication
+ */
+export async function handleCheckAdminStatus(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = (req as any).userId;
+
+    // Check if user is authenticated
+    if (!userId) {
+      logger.logWarning('Admin status check without authentication');
+      res.status(401).json({
+        success: false,
+        error: {
+          message: 'Authentication required',
+          code: 'UNAUTHORIZED',
+        },
+      } as AuthResponse);
+      return;
+    }
+
+    // Import fetchUserProfile from db
+
+    logger.logDebug('Checking admin status', { userId });
+
+    // Fetch user profile to check role
+    const userProfile = await fetchUserProfile(userId);
+
+    if (!userProfile) {
+      logger.logWarning('User profile not found for admin status check', { userId });
+      res.status(404).json({
+        success: false,
+        error: {
+          message: 'User profile not found',
+          code: 'NOT_FOUND',
+        },
+      } as AuthResponse);
+      return;
+    }
+
+    const isAdmin = userProfile.user_role === 'admin';
+
+    logger.logSuccess('Admin status checked', { userId, isAdmin });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        isAdmin,
+        userId,
+        userRole: userProfile.user_role,
+      },
+    } as AuthResponse);
+  } catch (error) {
+    logger.logError('Admin status check error', error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to check admin status',
+        code: 'INTERNAL_SERVER_ERROR',
+      },
+    } as AuthResponse);
+  }
+}
+
+/**
  * POST /api/v1/auth/refresh
  * Refresh access token using refresh token
  * Used to extend session without re-login
@@ -394,11 +459,7 @@ export async function handleRefreshToken(req: Request, res: Response): Promise<v
       return;
     }
 
-    const { createClient } = await import('@supabase/supabase-js');
-    const { getConfig } = await import('../lib/config');
-    const config = getConfig();
-
-    const anonClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    const anonClient = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
 

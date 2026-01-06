@@ -208,15 +208,57 @@ export async function fetchBookById(bookId: string): Promise<any> {
   return fetchWithErrorHandling(`/books/${bookId}`, { method: 'GET' });
 }
 
-export async function uploadBook(bookData: FormData): Promise<any> {
+// ============ ADMIN OPERATIONS ============
+
+export async function fetchAdminBooks(): Promise<any[]> {
+  return fetchWithErrorHandling('/admin/books', {
+    method: 'GET',
+    requiresAuth: true,
+  });
+}
+
+export async function checkAdminStatus(): Promise<{ isAdmin: boolean; userId: string; userRole: string }> {
+  return fetchWithErrorHandling('/auth/admin-status', {
+    method: 'GET',
+    requiresAuth: true,
+  });
+}
+
+
+export async function uploadBook(bookData: {
+  title: string;
+  author: string;
+  category: string;
+  age_group: string;
+  description: string;
+  genre: string;
+  pdfFile: File;
+  coverFile: File;
+}): Promise<any> {
   const url = `${API_PREFIX}/books`;
 
   try {
     logger.logRequest('POST', '/books');
 
+    const authHeaders = await getAuthHeaders();
+    const formData = new FormData();
+
+    // Add form fields
+    formData.append('title', bookData.title);
+    formData.append('author', bookData.author);
+    formData.append('category', bookData.category);
+    formData.append('age_group', bookData.age_group);
+    formData.append('description', bookData.description);
+    formData.append('genre', bookData.genre);
+
+    // Add files
+    formData.append('pdf', bookData.pdfFile);
+    formData.append('cover', bookData.coverFile);
+
     const response = await fetch(url, {
       method: 'POST',
-      body: bookData,
+      headers: authHeaders,
+      body: formData,
     });
 
     const duration = Date.now();
@@ -236,7 +278,7 @@ export async function uploadBook(bookData: FormData): Promise<any> {
     logger.logError('Book upload failed', fetchError, { endpoint: '/books' });
     throw new ApiError(500, 'Failed to upload book', 'UPLOAD_ERROR');
   }
-}
+}  
 
 export async function updateBook(bookId: string, updates: Record<string, unknown>): Promise<any> {
   return fetchWithErrorHandling(`/books/${bookId}`, { method: 'PUT', body: updates });

@@ -1,4 +1,5 @@
 import { getAccessToken } from './token-storage';
+const SUPABASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 export interface BookReview {
   id: string;
@@ -37,7 +38,7 @@ async function apiRequest<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   body?: unknown
 ): Promise<T> {
-  const url = `/api/v1${endpoint}`;
+  const url = `${SUPABASE_URL}/api/v1${endpoint}`;
   const authHeaders = getAuthHeaders();
 
   try {

@@ -23,7 +23,7 @@ import {
   handleDeleteBookReview,
 } from './reviews';
 import { handleToggleFavorite, handleFetchFavorites } from './favorites';
-import { handleRegister, handleLogin, handleLogout, handleGetSession, handleRefreshToken } from './auth';
+import { handleRegister, handleLogin, handleLogout, handleGetSession, handleRefreshToken, handleCheckAdminStatus } from './auth';
 
 /**
  * Create routers organized by domain
@@ -182,6 +182,7 @@ export function createAuthRouter(): Router {
   router.post('/logout', handleLogout);
   router.get('/session', handleGetSession);
   router.post('/refresh', handleRefreshToken);
+  router.get('/admin-status', handleCheckAdminStatus);
 
   logger.logSuccess('Auth router configured', {
     routes: [
@@ -190,6 +191,7 @@ export function createAuthRouter(): Router {
       'POST /logout',
       'GET /session',
       'POST /refresh',
+       'GET /admin-status',
     ],
   });
 

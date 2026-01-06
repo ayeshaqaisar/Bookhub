@@ -524,7 +524,6 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     throw new InternalServerError('Failed to fetch user profile');
   }
 }
-
 /** Update user profile */
 export async function updateUserProfile(
   userId: string,

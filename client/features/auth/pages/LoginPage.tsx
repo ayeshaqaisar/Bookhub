@@ -6,8 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BookOpen, Mail, Lock, Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { AuthApiError } from "@supabase/supabase-js";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,9 +16,17 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login, loginWithGoogle, isLoading: authLoading } = useAuth();
+  const { login, loginWithGoogle, isLoading: authLoading, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Redirect to profile when user is logged in
+  useEffect(() => {
+    if (user && !authLoading) {
+      console.log('User logged in, redirecting to profile', { userId: user.id, email: user.email });
+      navigate('/profile');
+    }
+  }, [user, authLoading, navigate]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,16 +44,10 @@ export function Login() {
         title: "Success",
         description: "Logged in successfully",
       });
-      navigate('/profile');
+      // Navigation is handled by useEffect watching the user state
     } catch (err) {
       let message = "Invalid email or password. Please try again.";
-      if (err instanceof AuthApiError) {
-        if (err.status === 400 && err.message.toLowerCase().includes("email not confirmed")) {
-          message = "Please verify your email using the link we sent before signing in.";
-        } else {
-          message = err.message;
-        }
-      } else if (err instanceof Error) {
+      if (err instanceof Error) {
         message = err.message;
       }
       setError(message);

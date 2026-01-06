@@ -2,13 +2,17 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { BookOpen, Menu, User, X, LogOut, Settings } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import * as apiClient from "@/services/api-client";
 
 export function Navigation() {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
+    // Backend admin authorization check
+  const [isAdminVerified, setIsAdminVerified] = useState(false);
+  const [adminCheckLoading, setAdminCheckLoading] = useState(true);
 
   const navLinks = [
     { href: "/", label: "Home" },
@@ -52,7 +56,7 @@ export function Navigation() {
                 {link.label}
               </Link>
             ))}
-            {user?.userRole === 'admin' && (
+           
               <Link
                 to="/admin"
                 className={`text-sm font-medium transition-colors hover:text-primary ${
@@ -63,7 +67,7 @@ export function Navigation() {
               >
                 Admin
               </Link>
-            )}
+
           </div>
 
           {/* Auth Section */}

@@ -11,31 +11,8 @@ import { validateStringParam, validateObjectId } from '../schemas/validators';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB limit
 
-interface FileData {
-  bytes: Uint8Array;
-  contentType: string;
-}
 
-/** Convert base64 or data URL to binary */
-function convertBase64ToBytes(dataUrlOrBase64: string): FileData {
-  const match = dataUrlOrBase64.match(/^data:(.*?);base64,(.*)$/);
-  let contentType = 'application/octet-stream';
-  let base64 = dataUrlOrBase64;
-
-  if (match) {
-    contentType = match[1] || contentType;
-    base64 = match[2];
-  } else if (dataUrlOrBase64.trim().startsWith('/9j/')) {
-    contentType = 'image/jpeg';
-  } else {
-    contentType = 'application/pdf';
-  }
-
-  const bytes = Uint8Array.from(Buffer.from(base64, 'base64'));
-  return { bytes, contentType };
-}
-
-/** Upload a new book with PDF and cover image */
+/** Upload a new book with PDF and cover image - Admin only */
 export async function handleUploadBook(req: Request, res: Response): Promise<void> {
   const startTime = Date.now();
   const endpoint = '/api/v1/books';
@@ -43,50 +20,67 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
   try {
     logger.logRequest('POST', endpoint);
 
-    // Validate request body
-    if (!req.body || typeof req.body !== 'object') {
-      throw new ValidationError('Request body must be an object');
+    // Admin middleware ensures user is admin, extract user ID for logging
+    const userId = (req as any).userId;
+    if (!userId) {
+      throw new ValidationError('User authentication required for book upload');
     }
 
-    const { title, author, category, age_group, description, genre, pdfBase64, coverBase64 } = req.body;
+    // Validate multipart form data
+    if (!req.body) {
+      throw new ValidationError('Request body is required');
+    }
 
-    // Validate required fields
+    const { title, author, category, age_group, description, genre } = req.body;
+    const files = req.files as Record<string, any[]> | undefined;
+
+    // Validate required text fields
     validateStringParam(title, 'Title');
     validateStringParam(author, 'Author');
     validateStringParam(category, 'Category');
     validateStringParam(age_group, 'Age group');
     validateStringParam(description, 'Description');
     validateStringParam(genre, 'Genre');
-    validateStringParam(pdfBase64, 'PDF data');
-    validateStringParam(coverBase64, 'Cover image data');
 
     // Validate category enum
     if (!['fiction', 'nonfiction', 'children'].includes(category)) {
       throw new ValidationError('Category must be fiction, nonfiction, or children');
     }
 
-    logger.logDebug('Validating file sizes', { title });
+    // Validate files are present
+    if (!files || !files.pdf || !files.cover) {
+      throw new ValidationError('Both PDF file and cover image are required');
+    }
 
-    // Convert files from base64
-    const { bytes: pdfBytes, contentType: pdfType } = convertBase64ToBytes(pdfBase64);
-    const { bytes: coverBytes, contentType: coverType } = convertBase64ToBytes(coverBase64);
+    if (files.pdf.length === 0 || files.cover.length === 0) {
+      throw new ValidationError('Both PDF file and cover image are required');
+    }
+
+    const pdfFile = files.pdf[0];
+    const coverFile = files.cover[0];
+
+    logger.logDebug('Validating files', {
+      title,
+      pdfSize: `${(pdfFile.size / 1024).toFixed(2)} KB`,
+      coverSize: `${(coverFile.size / 1024).toFixed(2)} KB`,
+    });
 
     // Validate file sizes
-    if (pdfBytes.length > MAX_FILE_SIZE) {
+    if (pdfFile.size > MAX_FILE_SIZE) {
       throw new ValidationError('PDF too large', {
-        size: `${(pdfBytes.length / 1024 / 1024).toFixed(2)} MB`,
+        size: `${(pdfFile.size / 1024 / 1024).toFixed(2)} MB`,
         maxSize: '50 MB',
       });
     }
 
-    if (coverBytes.length > MAX_FILE_SIZE) {
+    if (coverFile.size > MAX_FILE_SIZE) {
       throw new ValidationError('Cover image too large', {
-        size: `${(coverBytes.length / 1024 / 1024).toFixed(2)} MB`,
+        size: `${(coverFile.size / 1024 / 1024).toFixed(2)} MB`,
         maxSize: '50 MB',
       });
     }
 
-    logger.logDebug('Uploading files to storage', { title });
+    logger.logDebug('Uploading files to Supabase storage', { title });
 
     const supabase = getSupabaseAdmin();
     const bookId = randomUUID();
@@ -95,8 +89,10 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
     const coverObjectPath = `${bookId}/cover.jpg`;
 
     // Upload PDF
-    const { error: pdfErr } = await supabase.storage.from(bucket).upload(pdfObjectPath, pdfBytes, {
-      contentType: pdfType,
+    const { error: pdfErr } = await supabase.storage
+    .from(bucket)
+    .upload(pdfObjectPath, pdfFile.buffer, {
+      contentType: pdfFile.mimetype || 'application/pdf',
       upsert: true,
     });
 
@@ -106,8 +102,10 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
     }
 
     // Upload Cover
-    const { error: coverErr } = await supabase.storage.from(bucket).upload(coverObjectPath, coverBytes, {
-      contentType: coverType,
+    const { error: coverErr } = await supabase.storage
+    .from(bucket)
+    .upload(coverObjectPath, coverFile.buffer, {
+      contentType: coverFile.mimetype || 'image/jpeg',
       upsert: true,
     });
 
@@ -116,7 +114,7 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
       throw new ValidationError('Failed to upload cover image', { details: coverErr.message });
     }
 
-    logger.logDebug('Files uploaded, saving to database', { bookId, title });
+    logger.logDebug('Files uploaded to storage, saving book to database', { bookId, title });
 
     // Get public URLs
     const filePublic = supabase.storage.from(bucket).getPublicUrl(pdfObjectPath).data.publicUrl;
@@ -133,7 +131,7 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
       genre: genre.trim(),
       file_url: filePublic,
       cover_url: coverPublic,
-      processing_status: 'completed',
+      processing_status: 'started',
       created_at: new Date().toISOString(),
     });
 
@@ -147,7 +145,7 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
     logger.logSuccess('Book uploaded successfully', {
       bookId,
       title,
-      pdfSize: `${(pdfBytes.length / 1024).toFixed(2)} KB`,
+      pdfSize: `${(pdfFile.size / 1024).toFixed(2)} KB`,
     });
 
     sendSuccess(
@@ -175,6 +173,7 @@ export async function handleUploadBook(req: Request, res: Response): Promise<voi
 }
 
 /** Update an existing book's metadata */
+/** Update an existing book's metadata - Admin only */
 export async function handleUpdateBook(req: Request, res: Response): Promise<void> {
   const startTime = Date.now();
   const { id } = req.params;
@@ -182,6 +181,12 @@ export async function handleUpdateBook(req: Request, res: Response): Promise<voi
 
   try {
     logger.logRequest('PUT', endpoint);
+
+    // Admin middleware ensures user is admin, extract user ID for logging
+    const userId = (req as any).userId;
+    if (!userId) {
+      throw new ValidationError('User authentication required for book update');
+    }
 
     // Validate book ID
     const validId = validateObjectId(id, 'Book ID');
@@ -191,7 +196,7 @@ export async function handleUpdateBook(req: Request, res: Response): Promise<voi
       throw new ValidationError('Request body must be an object');
     }
 
-    logger.logDebug('Updating book', { bookId: validId });
+    logger.logDebug('Updating book', { bookId: validId, userId });
 
     // Update book using centralized function
     const updatedBook = await dbUpdateBook(validId, req.body);

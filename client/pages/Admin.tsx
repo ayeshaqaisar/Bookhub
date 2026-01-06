@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import * as apiClient from "@/services/api-client";
 
 export function Admin() {
   const { user, isLoading } = useAuth();
@@ -37,11 +38,35 @@ export function Admin() {
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [bookFetchError, setBookFetchError] = useState<string | null>(null);
 
-  // Authorization check - redirect if not admin
+  // Backend admin authorization check
+  const [isAdminVerified, setIsAdminVerified] = useState(false);
+  const [adminCheckLoading, setAdminCheckLoading] = useState(true);
+
   useEffect(() => {
-    if (!isLoading && (!user || user.userRole !== 'admin')) {
-      navigate('/profile', { replace: true });
-    }
+    const checkAdminStatus = async () => {
+      if (!isLoading && user) {
+        try {
+          const result = await apiClient.checkAdminStatus();
+          if (result.isAdmin) {
+            setIsAdminVerified(true);
+          } else {
+            console.warn('User does not have admin role');
+            navigate('/profile', { replace: true });
+          }
+        } catch (error) {
+          console.error('Failed to verify admin status:', error);
+          navigate('/profile', { replace: true });
+        } finally {
+          setAdminCheckLoading(false);
+        }
+      } else if (!isLoading && !user) {
+        navigate('/login', { replace: true });
+      } else {
+        setAdminCheckLoading(false);
+      }
+    };
+
+    checkAdminStatus();
   }, [user, isLoading, navigate]);
 
   useEffect(() => {
@@ -52,13 +77,8 @@ export function Admin() {
     setIsLoadingBooks(true);
     setBookFetchError(null);
     try {
-      const response = await fetch('/api/v1/admin/books');
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error?.message || 'Failed to fetch books');
-      }
-      const data = await response.json();
-      setAdminBooks(data.data || []);
+      const books = await apiClient.fetchAdminBooks();
+      setAdminBooks(books || []);
     } catch (err: any) {
       const errorMsg = err?.message || 'Failed to load book status';
       setBookFetchError(errorMsg);
@@ -168,22 +188,12 @@ export function Admin() {
       if (!selectedFile) throw new Error('No file selected');
       if (!coverFile) throw new Error('No cover selected');
 
-      const fileToDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
       const mapCategory = (cat: string) => {
         const c = cat.toLowerCase();
         if (c.includes('non')) return 'nonfiction';
         if (c.includes('child')) return 'children';
         return 'fiction';
       };
-
-      const pdfBase64 = await fileToDataUrl(selectedFile);
-      const coverBase64 = await fileToDataUrl(coverFile);
 
       const payload = {
         title: bookTitle,
@@ -192,22 +202,11 @@ export function Admin() {
         age_group: ageGroup || '18+',
         description: bookDescription || '',
         genre: genre || '',
-        pdfBase64,
-        coverBase64,
+        pdfFile: selectedFile,
+        coverFile: coverFile,
       };
 
-      const resp = await fetch('/api/v1/books', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok) {
-        const baseMsg = (data && (data.error || data.message)) || resp.statusText || 'Upload failed';
-        const details = data && (data.details || data.error_description);
-        const msg = details ? `${baseMsg}: ${details}` : baseMsg;
-        throw new Error(msg);
-      }
+      await apiClient.uploadBook(payload);
 
       clearInterval(interval);
       setUploadProgress(100);
@@ -278,15 +277,20 @@ export function Admin() {
   };
 
   // Show loading state while checking authorization
-  if (isLoading) {
+  if (isLoading || adminCheckLoading) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Verifying admin access...</p>
         </div>
       </div>
     );
+  }
+
+  // Only render admin dashboard if admin status is verified
+  if (!isAdminVerified) {
+    return null;
   }
 
   return (
