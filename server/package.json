@@ -5,8 +5,7 @@
   "main": "start.ts",
   "scripts": {
     "dev": "tsx watch start.ts",
-  "build": "tsc",
-  "start": "node dist/start.js"
+    "start": "tsx start.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
