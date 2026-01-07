@@ -1,4 +1,4 @@
-<h1 align="center">BookHUb</h1>
+<h1 align="center"> 📚 BookHub</h1>
 <p align="center">
   BookHub is an interactive reading and engagement platform. It enables users to read books online and interact with AI agents specialized by book type.
 </p>
