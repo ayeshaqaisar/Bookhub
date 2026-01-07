@@ -17,9 +17,13 @@ User Authentication: Secure registration and login system.
 Responsive Design: Works seamlessly on desktop, tablet, and mobile.
 
 <h2> 📂 Folder Structure </h2>
+
 bookhub/
+
 ├── 📁 client/ # React frontend
+
 ├── 📁 server/ # Node.js backend
+
 └── 📄 README.md
 
 
