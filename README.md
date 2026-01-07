@@ -18,8 +18,10 @@ Responsive Design: Works seamlessly on desktop, tablet, and mobile.
 
 <h2> 📂 Folder Structure </h2>
 bookhub/
-├── client/                 # React frontend
-├── server/                 # Node.js backend
-├── README.md
+├── 📁 client/ # React frontend
+├── 📁 server/ # Node.js backend
+└── 📄 README.md
 
-<a href="https://bookhub-client.onrender.com/"> Live for Testing </a>
+
+
+<a href="https://bookhub-client.onrender.com/"> Explore BookHub here </a>
